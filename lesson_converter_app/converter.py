@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import csv
 import json
+import re
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Any, Iterable
@@ -64,11 +65,15 @@ class Lesson:
         }
 
     def to_planbook_row(self, lesson_number: int) -> dict[str, str | int]:
+        section_lesson = _to_plain_text(self.lesson_name)
+        section_homework = _to_plain_text(self.homework_notes)
+        section_notes = _to_plain_text(self.lesson_plan)
+
         return {
             "Lesson #": lesson_number,
-            "Section 1 (Lesson)": self.lesson_plan,
-            "Section 2 (Homework)": self.homework_notes,
-            "Section 3 (Notes)": "",
+            "Section 1 (Lesson)": section_lesson,
+            "Section 2 (Homework)": section_homework,
+            "Section 3 (Notes)": section_notes,
             "Section 4": self.label1,
             "Section 5": self.label2,
             "Section 6": self.label3,
@@ -97,6 +102,22 @@ def _normalize_text(value: Any) -> str:
     if value is None:
         return ""
     return str(value).replace("\u00a0", " ").strip()
+
+
+def _to_plain_text(value: Any) -> str:
+    text = _normalize_text(value)
+    if not text:
+        return ""
+
+    text = re.sub(r"<br\s*/?>", "\n", text, flags=re.IGNORECASE)
+    text = re.sub(r"<[^>]+>", "", text)
+    text = text.replace("&nbsp;", " ")
+    text = text.replace("&amp;", "&")
+    text = text.replace("&lt;", "<")
+    text = text.replace("&gt;", ">")
+    text = text.replace("&quot;", '"')
+    text = text.replace("&#39;", "'")
+    return "\n".join(line.strip() for line in text.splitlines()).strip()
 
 
 def detect_csv_format(path: str | Path) -> str:
@@ -174,9 +195,17 @@ def convert_planbook_to_facts(rows: Iterable[dict[str, Any]]) -> list[Lesson]:
         if not lesson_name:
             lesson_name = _normalize_text(row.get("Lesson #") or "")
 
+        lesson_from_section = _normalize_text(row.get("Section 1 (Lesson)"))
+        notes_from_section = _normalize_text(row.get("Section 3 (Notes)"))
+        lesson_plan = _normalize_text(row.get("LessonPlan"))
+        if not lesson_plan:
+            lesson_plan = lesson_from_section
+        if notes_from_section:
+            lesson_plan = f"{lesson_plan}\n\n{notes_from_section}".strip() if lesson_plan else notes_from_section
+
         lesson = Lesson(
             lesson_name=lesson_name,
-            lesson_plan=_normalize_text(row.get("Section 1 (Lesson)") or row.get("LessonPlan")),
+            lesson_plan=lesson_plan,
             homework_notes=_normalize_text(row.get("Section 2 (Homework)") or row.get("HomeworkNotes")),
             label1=_normalize_text(row.get("Section 4") or row.get("Label1")),
             label2=_normalize_text(row.get("Section 5") or row.get("Label2")),
@@ -199,7 +228,7 @@ def write_facts_csv(path: str | Path, lessons: Iterable[Lesson]) -> None:
 def write_planbook_csv(path: str | Path, lessons: Iterable[Lesson]) -> None:
     csv_path = Path(path)
     rows = convert_facts_to_planbook(lessons)
-    with csv_path.open("w", encoding="utf-8", newline="") as csv_file:
+    with csv_path.open("w", encoding="utf-8-sig", newline="") as csv_file:
         writer = csv.DictWriter(csv_file, fieldnames=PLANBOOK_FIELDNAMES)
         writer.writeheader()
         for row in rows:

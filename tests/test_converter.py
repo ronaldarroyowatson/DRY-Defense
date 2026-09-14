@@ -2,15 +2,17 @@ import csv
 from pathlib import Path
 
 from lesson_converter_app.converter import (
+    PLANBOOK_FIELDNAMES,
     Lesson,
     convert_facts_to_planbook,
     convert_planbook_to_facts,
     load_facts_csv,
     load_planbook_csv,
+    write_planbook_csv,
 )
 
 
-def test_facts_to_planbook_roundtrip_preserves_fields():
+def test_facts_to_planbook_uses_planbook_compatible_sections():
     lessons = [
         Lesson(
             lesson_name="First Day Science",
@@ -23,11 +25,11 @@ def test_facts_to_planbook_roundtrip_preserves_fields():
         )
     ]
 
-    file_path = Path("/tmp/facts_to_planbook.csv")
     rows = convert_facts_to_planbook(lessons)
     assert rows[0]["Lesson Title"] == "First Day Science"
-    assert rows[0]["Section 1 (Lesson)"] == "<p>Intro</p>"
-    assert rows[0]["Section 2 (Homework)"] == "<p>Read pages 1-2</p>"
+    assert rows[0]["Section 1 (Lesson)"] == "First Day Science"
+    assert rows[0]["Section 2 (Homework)"] == "Read pages 1-2"
+    assert rows[0]["Section 3 (Notes)"] == "Intro"
     assert rows[0]["Section 4"] == "Goal 1"
     assert rows[0]["Section 5"] == "Goal 2"
     assert rows[0]["Section 6"] == "Goal 3"
@@ -35,8 +37,8 @@ def test_facts_to_planbook_roundtrip_preserves_fields():
 
     round_trip = convert_planbook_to_facts(rows)
     assert round_trip[0].lesson_name == "First Day Science"
-    assert round_trip[0].lesson_plan == "<p>Intro</p>"
-    assert round_trip[0].homework_notes == "<p>Read pages 1-2</p>"
+    assert round_trip[0].lesson_plan == "First Day Science\n\nIntro"
+    assert round_trip[0].homework_notes == "Read pages 1-2"
     assert round_trip[0].label1 == "Goal 1"
     assert round_trip[0].label2 == "Goal 2"
     assert round_trip[0].label3 == "Goal 3"
@@ -80,9 +82,28 @@ def test_load_planbook_csv_roundtrip_keeps_fields():
     ]
     lessons = convert_planbook_to_facts(rows)
     assert lessons[0].lesson_name == "Lesson Title"
-    assert lessons[0].lesson_plan == "<p>Plan</p>"
+    assert lessons[0].lesson_plan == "<p>Plan</p>\n\nNotes area"
     assert lessons[0].homework_notes == "<p>Work</p>"
     assert lessons[0].label1 == "L1"
     assert lessons[0].label2 == "L2"
     assert lessons[0].label3 == "L3"
     assert lessons[0].label4 == "L4"
+
+
+def test_write_planbook_csv_uses_expected_column_order(tmp_path: Path):
+    output_path = tmp_path / "planbook.csv"
+    lessons = [
+        Lesson(
+            lesson_name="Lesson 1",
+            lesson_plan="<p>Notes 1</p>",
+            homework_notes="<p>Homework 1</p>",
+            label1="",
+            label2="",
+            label3="",
+            label4="",
+        )
+    ]
+
+    write_planbook_csv(output_path, lessons)
+    lines = output_path.read_text(encoding="utf-8-sig").splitlines()
+    assert lines[0].split(",") == PLANBOOK_FIELDNAMES
