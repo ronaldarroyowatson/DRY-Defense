@@ -18,10 +18,14 @@ from PySide6.QtWidgets import (
 from lesson_converter_app.converter import convert_file, detect_csv_format
 
 
+APP_NAME = "DRY Defense"
+APP_VERSION = "1.0.0"
+
+
 class DropConvertWindow(QWidget):
     def __init__(self) -> None:
         super().__init__()
-        self.setWindowTitle("Lesson Converter")
+        self.setWindowTitle(f"{APP_NAME} v{APP_VERSION}")
         self.resize(700, 420)
         self.setAcceptDrops(True)
 
@@ -87,7 +91,7 @@ class DropConvertWindow(QWidget):
 
 def main() -> None:
     app = QApplication(sys.argv)
-    app.setApplicationName("Lesson Converter")
+    app.setApplicationName(APP_NAME)
     window = DropConvertWindow()
     window.show()
     sys.exit(app.exec())

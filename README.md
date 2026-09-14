@@ -2,6 +2,8 @@
 
 DRY Defense is a small desktop utility for converting lesson CSV files between FACTS and Planbook formats.
 
+Version: 1.0.0
+
 It is designed for a simple workflow:
 
 - drag a CSV file onto the app window, or click the file box to choose a file
