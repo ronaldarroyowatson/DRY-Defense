@@ -54,6 +54,28 @@ This project follows the core Pragmatic Programmer principles as a design and co
 
 ## Quick start
 
+### Download and install the Windows app
+
+Download the latest Windows release zip from the GitHub Releases page:
+
+- https://github.com/ronaldarroyowatson/DRY-Defense/releases
+
+Then:
+
+1. Download the latest `DRY-Defense-Windows.zip`
+2. Extract it to a folder on your PC
+3. Right-click `install_dry_defense.ps1`
+4. Choose `Run with PowerShell`
+5. Allow the script to run if Windows asks
+
+That script will:
+
+- copy the app into `%LOCALAPPDATA%\DRYDefense`
+- create a desktop shortcut named `DRY Defense`
+- make installation automatic and easy
+
+### Run from source
+
 Create a virtual environment and install dependencies:
 
 ```bash
@@ -78,19 +100,16 @@ Run the tests:
 Build a Windows app bundle:
 
 ```bash
-.venv\Scripts\python.exe -m PyInstaller --noconfirm --clean --onefile --windowed --name LessonConverter lesson_converter_app\main.py
+.venv\Scripts\python.exe -m PyInstaller --noconfirm --clean --onefile --windowed --name DRYDefense lesson_converter_app\main.py
 ```
 
-Install the app with a desktop shortcut:
+### Uninstall
 
-```bash
-.venv\Scripts\python.exe installer\install_lesson_converter.py
-```
+Delete the app folder and desktop shortcut:
 
-Uninstall it:
-
-```bash
-.venv\Scripts\python.exe installer\install_lesson_converter.py uninstall
+```powershell
+Remove-Item "$env:LOCALAPPDATA\DRYDefense" -Recurse -Force
+Remove-Item "$env:USERPROFILE\Desktop\DRY Defense.lnk" -Force -ErrorAction SilentlyContinue
 ```
 
 ## CSV support
