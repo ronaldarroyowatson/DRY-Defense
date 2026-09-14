@@ -7,7 +7,8 @@ on:
   workflow_dispatch:
 
 env:
-  WINDOWS_SIGNING_CERT_SUBJECT: ${{ secrets.WINDOWS_SIGNING_CERT_SUBJECT }}
+  WINDOWS_SIGNING_CERT_BASE64: ${{ secrets.WINDOWS_SIGNING_CERT_BASE64 }}
+  WINDOWS_SIGNING_CERT_PASSWORD: ${{ secrets.WINDOWS_SIGNING_CERT_PASSWORD }}
 
 jobs:
   build-windows-installer:
@@ -33,14 +34,34 @@ jobs:
       - name: Validate signing configuration
         shell: pwsh
         run: |
-          if (-not $env:WINDOWS_SIGNING_CERT_SUBJECT) {
-            throw "Missing required secret WINDOWS_SIGNING_CERT_SUBJECT. Refusing to publish an unsigned release artifact."
+          if (-not $env:WINDOWS_SIGNING_CERT_BASE64) {
+            throw "Missing required secret WINDOWS_SIGNING_CERT_BASE64. Refusing to publish an unsigned release artifact."
+          }
+
+          if (-not $env:WINDOWS_SIGNING_CERT_PASSWORD) {
+            throw "Missing required secret WINDOWS_SIGNING_CERT_PASSWORD. Refusing to publish an unsigned release artifact."
           }
 
           $signtool = Get-Command signtool.exe -ErrorAction SilentlyContinue
           if (-not $signtool) {
             throw "signtool.exe is required for Authenticode signing."
           }
+
+      - name: Import code-signing certificate
+        shell: pwsh
+        run: |
+          $certBytes = [Convert]::FromBase64String($env:WINDOWS_SIGNING_CERT_BASE64)
+          $certPath = Join-Path $env:RUNNER_TEMP 'dry-defense-signing-cert.pfx'
+          [IO.File]::WriteAllBytes($certPath, $certBytes)
+
+          $securePassword = ConvertTo-SecureString $env:WINDOWS_SIGNING_CERT_PASSWORD -AsPlainText -Force
+          $imported = Import-PfxCertificate -FilePath $certPath -CertStoreLocation Cert:\CurrentUser\My -Password $securePassword -Exportable
+          if (-not $imported) {
+            throw "Failed to import signing certificate into Cert:\CurrentUser\My."
+          }
+
+          "DRY_DEFENSE_CERT_PATH=$certPath" | Out-File -FilePath $env:GITHUB_ENV -Append
+          "DRY_DEFENSE_CERT_THUMBPRINT=$($imported.Thumbprint)" | Out-File -FilePath $env:GITHUB_ENV -Append
 
       - name: Build DRY Defense executable
         run: |
@@ -50,17 +71,33 @@ jobs:
         shell: pwsh
         run: |
           $exe = Join-Path $env:GITHUB_WORKSPACE 'dist\DRYDefense.exe'
-          signtool.exe sign /fd SHA256 /tr http://timestamp.digicert.com /td SHA256 /n "$env:WINDOWS_SIGNING_CERT_SUBJECT" /v "$exe"
+          signtool.exe sign /fd SHA256 /tr http://timestamp.digicert.com /td SHA256 /f "$env:DRY_DEFENSE_CERT_PATH" /p "$env:WINDOWS_SIGNING_CERT_PASSWORD" /v "$exe"
 
       - name: Sign installer script
         shell: pwsh
         run: |
           $installer = Join-Path $env:GITHUB_WORKSPACE 'install_dry_defense.ps1'
-          $cert = Get-ChildItem Cert:\CurrentUser\My | Where-Object { $_.Subject -match $env:WINDOWS_SIGNING_CERT_SUBJECT } | Select-Object -First 1
+          $cert = Get-ChildItem Cert:\CurrentUser\My | Where-Object { $_.Thumbprint -eq $env:DRY_DEFENSE_CERT_THUMBPRINT } | Select-Object -First 1
           if (-not $cert) {
-            throw "No certificate matching subject '$env:WINDOWS_SIGNING_CERT_SUBJECT' in Cert:\CurrentUser\My."
+            throw "Imported signing certificate was not found in Cert:\CurrentUser\My."
           }
           Set-AuthenticodeSignature -FilePath $installer -Certificate $cert -TimestampServer 'http://timestamp.digicert.com' | Out-Null
+
+      - name: Verify signatures
+        shell: pwsh
+        run: |
+          $exe = Join-Path $env:GITHUB_WORKSPACE 'dist\DRYDefense.exe'
+          $installer = Join-Path $env:GITHUB_WORKSPACE 'install_dry_defense.ps1'
+
+          $exeSig = Get-AuthenticodeSignature -FilePath $exe
+          if ($exeSig.Status -ne 'Valid') {
+            throw "Executable signature is not valid: $($exeSig.Status)"
+          }
+
+          $installerSig = Get-AuthenticodeSignature -FilePath $installer
+          if ($installerSig.Status -ne 'Valid') {
+            throw "Installer signature is not valid: $($installerSig.Status)"
+          }
 
       - name: Prepare release bundle
         shell: pwsh
@@ -70,6 +107,18 @@ jobs:
           Copy-Item (Join-Path $env:GITHUB_WORKSPACE 'dist\DRYDefense.exe') (Join-Path $bundle 'DRYDefense.exe') -Force
           Copy-Item (Join-Path $env:GITHUB_WORKSPACE 'install_dry_defense.ps1') (Join-Path $bundle 'install_dry_defense.ps1') -Force
           Compress-Archive -Path (Join-Path $bundle '*') -DestinationPath (Join-Path $env:GITHUB_WORKSPACE 'dist\DRY-Defense-Windows.zip') -Force
+
+      - name: Remove signing certificate and temp file
+        if: always()
+        shell: pwsh
+        run: |
+          if ($env:DRY_DEFENSE_CERT_THUMBPRINT) {
+            Get-ChildItem Cert:\CurrentUser\My | Where-Object { $_.Thumbprint -eq $env:DRY_DEFENSE_CERT_THUMBPRINT } | Remove-Item -Force -ErrorAction SilentlyContinue
+          }
+
+          if ($env:DRY_DEFENSE_CERT_PATH -and (Test-Path $env:DRY_DEFENSE_CERT_PATH)) {
+            Remove-Item $env:DRY_DEFENSE_CERT_PATH -Force -ErrorAction SilentlyContinue
+          }
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4

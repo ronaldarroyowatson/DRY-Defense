@@ -58,7 +58,37 @@ This project follows the core Pragmatic Programmer principles as a design and co
 
 Windows Smart App Control and Defender reputation checks commonly block unsigned executables that are downloaded from the internet. To avoid this, DRY Defense release binaries must be Authenticode-signed before publishing.
 
-This repository enforces signing in the GitHub release workflow. If `WINDOWS_SIGNING_CERT_SUBJECT` is not configured as a repository secret, the release build fails instead of publishing an unsigned artifact.
+This repository enforces signing in the GitHub release workflow. If required signing secrets are missing, the release build fails instead of publishing an unsigned artifact.
+
+Required repository secrets:
+
+- WINDOWS_SIGNING_CERT_BASE64
+- WINDOWS_SIGNING_CERT_PASSWORD
+
+Set them once with GitHub CLI:
+
+```powershell
+Set-Location "c:\workspace\DRY Defense"
+$pfxPath = "C:\path\to\your\code-signing-certificate.pfx"
+$password = Read-Host "PFX password" -AsSecureString
+$bstr = [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($password)
+$plain = [System.Runtime.InteropServices.Marshal]::PtrToStringAuto($bstr)
+try {
+	$base64 = [Convert]::ToBase64String([IO.File]::ReadAllBytes($pfxPath))
+	$base64 | gh secret set WINDOWS_SIGNING_CERT_BASE64 -R ronaldarroyowatson/DRY-Defense
+	$plain | gh secret set WINDOWS_SIGNING_CERT_PASSWORD -R ronaldarroyowatson/DRY-Defense
+} finally {
+	[System.Runtime.InteropServices.Marshal]::ZeroFreeBSTR($bstr)
+}
+```
+
+After secrets are set, publish a tag to trigger a signed release:
+
+```powershell
+Set-Location "c:\workspace\DRY Defense"
+git tag v1.0.1
+git push origin v1.0.1
+```
 
 For local signed packaging, run:
 
