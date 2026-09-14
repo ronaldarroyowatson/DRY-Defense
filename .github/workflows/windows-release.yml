@@ -6,9 +6,15 @@ on:
       - 'v*.*.*'
   workflow_dispatch:
 
+env:
+  WINDOWS_SIGNING_CERT_SUBJECT: ${{ secrets.WINDOWS_SIGNING_CERT_SUBJECT }}
+
 jobs:
   build-windows-installer:
     runs-on: windows-latest
+
+    permissions:
+      contents: write
 
     steps:
       - name: Checkout repository
@@ -24,9 +30,37 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install PySide6 PyInstaller
 
+      - name: Validate signing configuration
+        shell: pwsh
+        run: |
+          if (-not $env:WINDOWS_SIGNING_CERT_SUBJECT) {
+            throw "Missing required secret WINDOWS_SIGNING_CERT_SUBJECT. Refusing to publish an unsigned release artifact."
+          }
+
+          $signtool = Get-Command signtool.exe -ErrorAction SilentlyContinue
+          if (-not $signtool) {
+            throw "signtool.exe is required for Authenticode signing."
+          }
+
       - name: Build DRY Defense executable
         run: |
           python -m PyInstaller --noconfirm --clean --onefile --windowed --name DRYDefense lesson_converter_app\main.py
+
+      - name: Sign executable
+        shell: pwsh
+        run: |
+          $exe = Join-Path $env:GITHUB_WORKSPACE 'dist\DRYDefense.exe'
+          signtool.exe sign /fd SHA256 /tr http://timestamp.digicert.com /td SHA256 /n "$env:WINDOWS_SIGNING_CERT_SUBJECT" /v "$exe"
+
+      - name: Sign installer script
+        shell: pwsh
+        run: |
+          $installer = Join-Path $env:GITHUB_WORKSPACE 'install_dry_defense.ps1'
+          $cert = Get-ChildItem Cert:\CurrentUser\My | Where-Object { $_.Subject -match $env:WINDOWS_SIGNING_CERT_SUBJECT } | Select-Object -First 1
+          if (-not $cert) {
+            throw "No certificate matching subject '$env:WINDOWS_SIGNING_CERT_SUBJECT' in Cert:\CurrentUser\My."
+          }
+          Set-AuthenticodeSignature -FilePath $installer -Certificate $cert -TimestampServer 'http://timestamp.digicert.com' | Out-Null
 
       - name: Prepare release bundle
         shell: pwsh

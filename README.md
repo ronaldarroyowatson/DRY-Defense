@@ -54,6 +54,21 @@ This project follows the core Pragmatic Programmer principles as a design and co
 
 ## Quick start
 
+### Smart App Control safety (required for distribution)
+
+Windows Smart App Control and Defender reputation checks commonly block unsigned executables that are downloaded from the internet. To avoid this, DRY Defense release binaries must be Authenticode-signed before publishing.
+
+This repository enforces signing in the GitHub release workflow. If `WINDOWS_SIGNING_CERT_SUBJECT` is not configured as a repository secret, the release build fails instead of publishing an unsigned artifact.
+
+For local signed packaging, run:
+
+```powershell
+Set-Location "c:\workspace\DRY Defense"
+./sign_windows_release.ps1 -SubjectName "Your Code Signing Certificate Subject"
+```
+
+Distribute only signed release artifacts.
+
 ### Download and install the Windows app
 
 Download the latest Windows release zip from the GitHub Releases page:
