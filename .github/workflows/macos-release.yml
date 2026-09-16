@@ -1,0 +1,96 @@
+name: macOS Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
+
+env:
+  APPLE_DEVELOPER_ID_APP_CERT_BASE64: ${{ secrets.APPLE_DEVELOPER_ID_APP_CERT_BASE64 }}
+  APPLE_DEVELOPER_ID_APP_CERT_PASSWORD: ${{ secrets.APPLE_DEVELOPER_ID_APP_CERT_PASSWORD }}
+  APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+  APPLE_ID: ${{ secrets.APPLE_ID }}
+  APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+
+jobs:
+  build-macos-installer:
+    runs-on: macos-latest
+
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install PySide6 PyInstaller
+
+      - name: Build macOS app bundle
+        run: |
+          python -m PyInstaller --noconfirm --clean --windowed --name DRYDefense lesson_converter_app/main.py
+
+      - name: Import Developer ID certificate
+        if: ${{ env.APPLE_DEVELOPER_ID_APP_CERT_BASE64 != '' && env.APPLE_DEVELOPER_ID_APP_CERT_PASSWORD != '' }}
+        run: |
+          CERT_PATH="$RUNNER_TEMP/dry-defense-dev-id.p12"
+          KEYCHAIN_PATH="$RUNNER_TEMP/dry-defense.keychain-db"
+          KEYCHAIN_PASSWORD="dry-defense-keychain"
+
+          echo "$APPLE_DEVELOPER_ID_APP_CERT_BASE64" | base64 --decode > "$CERT_PATH"
+
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security import "$CERT_PATH" -P "$APPLE_DEVELOPER_ID_APP_CERT_PASSWORD" -A -t cert -f pkcs12 -k "$KEYCHAIN_PATH"
+          security list-keychain -d user -s "$KEYCHAIN_PATH" $(security list-keychains -d user | sed s/\"//g)
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+
+          echo "DRY_DEFENSE_KEYCHAIN=$KEYCHAIN_PATH" >> "$GITHUB_ENV"
+
+      - name: Code sign app bundle
+        if: ${{ env.APPLE_DEVELOPER_ID_APP_CERT_BASE64 != '' && env.APPLE_DEVELOPER_ID_APP_CERT_PASSWORD != '' }}
+        run: |
+          APP_PATH="dist/DRYDefense.app"
+          IDENTITY=$(security find-identity -v -p codesigning "$DRY_DEFENSE_KEYCHAIN" | grep "Developer ID Application" | head -n 1 | sed -E 's/.*\"(.*)\"/\1/')
+          if [[ -z "$IDENTITY" ]]; then
+            echo "Developer ID Application identity not found."
+            exit 1
+          fi
+
+          codesign --deep --force --verify --verbose --options runtime --sign "$IDENTITY" "$APP_PATH"
+
+      - name: Prepare macOS release bundle
+        run: |
+          BUNDLE="dist/DRY-Defense-macOS"
+          mkdir -p "$BUNDLE"
+          cp -R dist/DRYDefense.app "$BUNDLE/DRYDefense.app"
+          cp install_dry_defense_macos.command "$BUNDLE/install_dry_defense_macos.command"
+          chmod +x "$BUNDLE/install_dry_defense_macos.command"
+          cd dist
+          zip -r "DRY-Defense-macOS.zip" "DRY-Defense-macOS"
+
+      - name: Notarize app (optional)
+        if: ${{ env.APPLE_TEAM_ID != '' && env.APPLE_ID != '' && env.APPLE_APP_SPECIFIC_PASSWORD != '' && env.APPLE_DEVELOPER_ID_APP_CERT_BASE64 != '' && env.APPLE_DEVELOPER_ID_APP_CERT_PASSWORD != '' }}
+        run: |
+          xcrun notarytool submit "dist/DRY-Defense-macOS.zip" --apple-id "$APPLE_ID" --password "$APPLE_APP_SPECIFIC_PASSWORD" --team-id "$APPLE_TEAM_ID" --wait
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: DRY-Defense-macOS
+          path: dist/DRY-Defense-macOS.zip
+
+      - name: Publish GitHub Release asset
+        uses: softprops/action-gh-release@v2
+        if: startsWith(github.ref, 'refs/tags/')
+        with:
+          files: dist/DRY-Defense-macOS.zip

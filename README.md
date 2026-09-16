@@ -119,6 +119,44 @@ That script will:
 - create a desktop shortcut named `DRY Defense`
 - make installation automatic and easy
 
+### Download and install the macOS app
+
+Download the latest macOS release zip:
+
+- https://github.com/ronaldarroyowatson/DRY-Defense/releases/latest/download/DRY-Defense-macOS.zip
+
+Then:
+
+1. Download `DRY-Defense-macOS.zip`
+2. Open the zip and open the `DRY-Defense-macOS` folder
+3. Double-click `install_dry_defense_macos.command`
+4. Launch `DRYDefense.app` from Applications
+
+The mac installer script will:
+
+- copy `DRYDefense.app` into `/Applications` (or `~/Applications` if needed)
+- remove quarantine metadata from the installed app
+- keep install simple with no manual file moves
+
+### macOS blocker clearing (Gatekeeper)
+
+If macOS blocks launch with an unidentified developer message, use one of these options:
+
+1. Right-click `DRYDefense.app`, choose `Open`, then click `Open` again.
+2. Run in Terminal:
+
+```bash
+xattr -dr com.apple.quarantine /Applications/DRYDefense.app
+open /Applications/DRYDefense.app
+```
+
+If the app was installed under your home folder instead:
+
+```bash
+xattr -dr com.apple.quarantine "$HOME/Applications/DRYDefense.app"
+open "$HOME/Applications/DRYDefense.app"
+```
+
 ### Run from source
 
 Create a virtual environment and install dependencies:
