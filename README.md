@@ -74,11 +74,11 @@ $password = Read-Host "PFX password" -AsSecureString
 $bstr = [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($password)
 $plain = [System.Runtime.InteropServices.Marshal]::PtrToStringAuto($bstr)
 try {
-	$base64 = [Convert]::ToBase64String([IO.File]::ReadAllBytes($pfxPath))
-	$base64 | gh secret set WINDOWS_SIGNING_CERT_BASE64 -R ronaldarroyowatson/DRY-Defense
-	$plain | gh secret set WINDOWS_SIGNING_CERT_PASSWORD -R ronaldarroyowatson/DRY-Defense
+  $base64 = [Convert]::ToBase64String([IO.File]::ReadAllBytes($pfxPath))
+  $base64 | gh secret set WINDOWS_SIGNING_CERT_BASE64 -R ronaldarroyowatson/DRY-Defense
+  $plain | gh secret set WINDOWS_SIGNING_CERT_PASSWORD -R ronaldarroyowatson/DRY-Defense
 } finally {
-	[System.Runtime.InteropServices.Marshal]::ZeroFreeBSTR($bstr)
+  [System.Runtime.InteropServices.Marshal]::ZeroFreeBSTR($bstr)
 }
 ```
 
@@ -103,7 +103,7 @@ Distribute only signed release artifacts.
 
 Download the latest Windows release zip from the GitHub Releases page:
 
-- https://github.com/ronaldarroyowatson/DRY-Defense/releases
+- [GitHub Releases](https://github.com/ronaldarroyowatson/DRY-Defense/releases)
 
 Then:
 
@@ -123,7 +123,7 @@ That script will:
 
 Download the latest macOS release zip:
 
-- https://github.com/ronaldarroyowatson/DRY-Defense/releases/latest/download/DRY-Defense-macOS.zip
+- [DRY-Defense-macOS.zip](https://github.com/ronaldarroyowatson/DRY-Defense/releases/latest/download/DRY-Defense-macOS.zip)
 
 Then:
 
